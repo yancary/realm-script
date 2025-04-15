@@ -526,9 +526,9 @@ delete_forward() {
 # 添加转发规则
 add_forward() {
     while true; do
+        read -e -p "请输入本地中转节点的端口（port1）: " port1
         read -e -p "请输入落地节点的IP: " ip
         read -e -p "请输入落地节点端口（port2）: " port2
-        read -e -p "请输入本地中转节点的端口（port1）: " port1
         echo "
 [[endpoints]]
 listen = \"0.0.0.0:$port1\"
