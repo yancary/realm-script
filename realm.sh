@@ -7,7 +7,7 @@ purple="\033[0;35m"
 plain="\033[0m"
 
 # 脚本版本
-sh_ver="1.0"
+sh_ver="1.1"
 
 # 初始化环境目录
 init_env() {
@@ -527,8 +527,8 @@ delete_forward() {
 add_forward() {
     while true; do
         read -e -p "请输入落地节点的IP: " ip
-        read -e -p "请输入本地中转节点的端口（port1）: " port1
         read -e -p "请输入落地节点端口（port2）: " port2
+        read -e -p "请输入本地中转节点的端口（port1）: " port1
         echo "
 [[endpoints]]
 listen = \"0.0.0.0:$port1\"
