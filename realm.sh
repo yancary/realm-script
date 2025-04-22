@@ -4,6 +4,7 @@
 red="\033[0;31m"
 green="\033[0;32m"
 purple="\033[0;35m"
+yellow="\033[0;33m"
 plain="\033[0m"
 
 # 脚本版本
@@ -333,25 +334,20 @@ delete_forward() {
         return
     fi
 
-    # 先显示当前规则
     view_forward_rules
 
-    # 获取有效规则的数量（排除注释的规则）
     local total_rules=0
     local is_comment=0
     local inblock=0
     
     while IFS= read -r line || [[ -n "$line" ]]; do
-        # 检查是否是注释行
         if [[ "$line" =~ ^[[:space:]]*# ]]; then
             is_comment=1
             continue
         fi
 
-        # 去除行尾注释和空白
         line=$(echo "$line" | sed 's/#.*$//' | xargs)
         
-        # 跳过空行
         if [[ -z "$line" ]]; then
             continue
         fi
@@ -373,33 +369,26 @@ delete_forward() {
     echo "  -或输入范围 [例如: 1-$total_rules] 删除全部规则"
     read -p "输入序号(输入 0 取消): " choice
 
-    # 检查是否取消
     if [[ "$choice" == "0" ]]; then
         echo "已取消删除操作。"
         return
     fi
 
-    # 处理输入并创建一个要删除的规则序号数组
     local rules_to_delete=()
     
-    # 处理范围输入 (例如: 1-3)
     if [[ "$choice" =~ ^[0-9]+-[0-9]+$ ]]; then
         local start_range=$(echo "$choice" | cut -d'-' -f1)
         local end_range=$(echo "$choice" | cut -d'-' -f2)
         
-        # 验证范围
         if [[ $start_range -lt 1 || $end_range -gt $total_rules || $start_range -gt $end_range ]]; then
             echo -e "${red}无效的范围，请确保范围在 1-$total_rules 之间且起始值小于结束值。${plain}"
             return
         fi
         
-        # 添加范围内的所有规则
         for ((i=start_range; i<=end_range; i++)); do
             rules_to_delete+=($i)
         done
-    # 处理单个数字
     elif [[ "$choice" =~ ^[0-9]+$ ]]; then
-        # 验证序号
         if [[ $choice -lt 1 || $choice -gt $total_rules ]]; then
             echo -e "${red}无效的序号，请输入 1-$total_rules 之间的数字。${plain}"
             return
@@ -410,21 +399,16 @@ delete_forward() {
         return
     fi
 
-    # 按从大到小的顺序排序规则序号，以避免删除早期规则后影响后续规则的位置
     IFS=$'\n' rules_to_delete=($(sort -nr <<<"${rules_to_delete[*]}"))
     unset IFS
     
-    # 创建一个临时文件来存储处理后的配置
     local tmp_config=$(mktemp)
     
-    # 实际删除操作
     local deleted_count=0
     
-    # 先将配置文件复制到临时文件
     cp "$CONFIG_PATH" "$tmp_config"
     
     for rule_num in "${rules_to_delete[@]}"; do
-        # 找到要删除的规则行号和范围
         local current_rule=0
         local start_line=""
         local end_line=""
@@ -434,29 +418,24 @@ delete_forward() {
         while IFS= read -r line || [[ -n "$line" ]]; do
             ((line_number++))
             
-            # 去除前后空格
             trimmed_line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             
-            # 跳过注释行
             if [[ "$trimmed_line" =~ ^# ]]; then
                 continue
             fi
             
-            # 检测endpoints块开始
             if [[ "$trimmed_line" == "[[endpoints]]" ]]; then
                 ((current_rule++))
                 if [[ $current_rule -eq $rule_num ]]; then
                     start_line=$line_number
                     in_rule=1
                 elif [[ $in_rule -eq 1 ]]; then
-                    # 找到下一个endpoints块，说明当前块结束
                     end_line=$((line_number - 1))
                     break
                 fi
             fi
         done < "$CONFIG_PATH"
         
-        # 如果没有找到结束行，说明是最后一个规则
         if [[ -n "$start_line" && -z "$end_line" ]]; then
             end_line=$(wc -l < "$CONFIG_PATH")
         fi
@@ -466,8 +445,6 @@ delete_forward() {
             continue
         fi
         
-        # 扩展删除范围，包括规则前后的空行
-        # 找到规则前的空行
         local extra_lines_before=0
         for ((i=start_line-1; i>=1; i--)); do
             line=$(sed "${i}q;d" "$CONFIG_PATH")
@@ -478,7 +455,6 @@ delete_forward() {
             fi
         done
         
-        # 找到规则后的空行
         local extra_lines_after=0
         local total_lines=$(wc -l < "$CONFIG_PATH")
         for ((i=end_line+1; i<=total_lines; i++)); do
@@ -490,21 +466,16 @@ delete_forward() {
             fi
         done
         
-        # 调整删除范围，包括空行
         start_line=$((start_line - extra_lines_before))
         end_line=$((end_line + extra_lines_after))
         
-        # 确保开始行号不小于1
         start_line=$((start_line > 0 ? start_line : 1))
         
-        # 从临时文件中删除指定行范围
         sed -i "${start_line},${end_line}d" "$tmp_config"
         ((deleted_count++))
     done
     
-    # 如果有成功删除的规则，替换原配置文件
     if [[ $deleted_count -gt 0 ]]; then
-        # 清理连续的多个空行为单个空行
         sed -i '/^[[:space:]]*$/N;/^\n[[:space:]]*$/D' "$tmp_config"
         mv "$tmp_config" "$CONFIG_PATH"
     else
@@ -521,6 +492,19 @@ delete_forward() {
     
     echo "当前剩余规则："
     view_forward_rules
+    
+    if [[ $deleted_count -gt 0 ]]; then
+        echo -e "${yellow}注意: 规则删除后需要重启服务才能生效。${plain}"
+        read -e -p "是否立即重启服务使更改生效? (Y/N): " restart_service
+        
+        if [[ $restart_service == "Y" || $restart_service == "y" ]]; then
+            systemctl restart realm.service
+            echo -e "${green}服务已重启，更改已生效。${plain}"
+            check_realm_service_status
+        else
+            echo -e "${yellow}您选择了不重启服务，请记得手动重启服务以使更改生效。${plain}"
+        fi
+    fi
 }
 
 # 添加转发规则
@@ -539,6 +523,18 @@ remote = \"$ip:$port2\"" >> /root/.realm/config.toml
             break
         fi
     done
+    
+    echo -e "${green}转发规则添加完成。${plain}"
+    echo -e "${yellow}注意: 新添加的规则需要重启服务后才能生效。${plain}"
+    read -e -p "是否立即重启服务使规则生效? (Y/N): " restart_service
+    
+    if [[ $restart_service == "Y" || $restart_service == "y" ]]; then
+        systemctl restart realm.service
+        echo -e "${green}服务已重启，规则已生效。${plain}"
+        check_realm_service_status
+    else
+        echo -e "${yellow}您选择了不重启服务，请记得手动重启服务以使规则生效。${plain}"
+    fi
 }
 
 # 启动服务
