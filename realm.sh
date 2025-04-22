@@ -8,7 +8,7 @@ yellow="\033[0;33m"
 plain="\033[0m"
 
 # 脚本版本
-sh_ver="1.1"
+sh_ver="1.2"
 
 # 初始化环境目录
 init_env() {
